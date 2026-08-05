@@ -125,7 +125,7 @@ azd up
 
 ```text
 ? Select an Azure Subscription to use:: <사용할 구독 선택>
-? Enter a value for the 'location' infrastructure parameter:: 14. (Asia Pacific) Korea Central (koreacentral)
+? Enter a value for the 'location' infrastructure parameter:: 15. (Asia Pacific) Korea Central (koreacentral)
 ? Pick a resource group to use:: 1. Create a new resource group
 ? Enter a name for the new resource group:: rg-<alias>-<날짜>
 ```
