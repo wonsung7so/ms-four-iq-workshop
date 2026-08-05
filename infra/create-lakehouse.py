@@ -920,8 +920,9 @@ def wait_for_graph_model_ready(
     lakehouse_id: str,
     max_attempts: int = 3,
     poll_interval: int = 15,
-    poll_timeout: int = 240,
+    poll_timeout: int = 300,
     retry_wait: int = 90,
+    new_job_timeout: int = 60,
 ) -> bool:
     """Wait for the ontology's GraphModel refresh to succeed, retrying on GraphNotRefreshable.
 
@@ -936,8 +937,21 @@ def wait_for_graph_model_ready(
         log_message("WARNING: Could not locate the ontology's GraphModel item to verify readiness.")
         return False
 
+    last_seen_job_id = None
+
     for attempt in range(1, max_attempts + 1):
+        # Fabric doesn't register a new job instance the moment updateDefinition returns,
+        # so wait for one with an id different from the last attempt's before evaluating it
+        # (otherwise we'd re-read the previous attempt's already-terminal job).
         job = None
+        waited = 0
+        while waited <= new_job_timeout:
+            job = get_latest_job_instance(workspace_id, graph_item["id"])
+            if job and job.get("id") != last_seen_job_id:
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
         waited = 0
         while waited <= poll_timeout:
             job = get_latest_job_instance(workspace_id, graph_item["id"])
@@ -947,6 +961,7 @@ def wait_for_graph_model_ready(
             time.sleep(poll_interval)
             waited += poll_interval
 
+        last_seen_job_id = job.get("id") if job else last_seen_job_id
         status = job.get("status") if job else None
         if status == "Completed":
             log_message("GraphModel refresh completed successfully.")
@@ -957,8 +972,11 @@ def wait_for_graph_model_ready(
             f"GraphModel refresh attempt {attempt}/{max_attempts} did not complete "
             f"(status={status}, errorCode={error_code})."
         )
-        if error_code != "GraphNotRefreshable" or attempt == max_attempts:
+        if attempt == max_attempts:
             return False
+        if status == "InProgress":
+            log_message("Still building; continuing to wait...")
+            continue
 
         log_message(f"Likely a lakehouse sync race condition. Waiting {retry_wait}s and retrying...")
         time.sleep(retry_wait)
