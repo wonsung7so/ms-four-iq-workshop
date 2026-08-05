@@ -125,6 +125,13 @@ def main() -> int:
     if not ok:
         raise RuntimeError("Ontology definition update failed")
 
+    # The first GraphModel refresh right after a definition push can fail with
+    # GraphNotRefreshable because the lakehouse's SQL endpoint hasn't synced yet;
+    # this waits and retries so callers don't hit "Graph Model is not ready" right after.
+    graph_ready = module.wait_for_graph_model_ready(workspace_id, ontology["id"], lakehouse["id"])
+    if not graph_ready:
+        print("WARNING: GraphModel did not confirm ready after retries. Wait a few minutes and re-run Part 3 cell 12.")
+
     set_key(str(ENV_PATH), "FABRIC_ONTOLOGY_ID", ontology["id"])
     if hasattr(module, "reorder_env_sections"):
         module.reorder_env_sections()
