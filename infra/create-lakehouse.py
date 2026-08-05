@@ -19,11 +19,15 @@ Environment variables (from .env):
   CREATE_ONTOLOGY      - Create/update ontology after table load (default: true)
   INCLUDE_EMBEDDINGS   - Include vector embeddings in products table (default: false)
   INCLUDE_CATEGORY_RELATIONSHIP - Add a belongsToCategory relationship (Product->Category)
-                         to the ontology (default: false). Disabled by default because it
-                         currently causes the Fabric IQ GraphModel refresh to fail with
-                         "GraphNotRefreshable: Graph doesn't have valid content and cannot
-                         be refreshed." in this Fabric Ontology preview feature. Only
-                         enable this for further investigation of that issue.
+                         to the ontology (default: false). Left disabled by default to keep
+                         the ontology minimal for the workshop; re-enable once you've
+                         validated it end-to-end if you want the extra relationship.
+
+Note on the Fabric IQ GraphModel: right after tables are loaded, Fabric's first automatic
+graph refresh can fail with "GraphNotRefreshable: Graph doesn't have valid content and
+cannot be refreshed." This is a timing race with the lakehouse's SQL analytics endpoint
+sync, not a schema problem. `wait_for_graph_model_ready()` detects this and retries the
+definition push with a delay so the script self-heals instead of leaving a broken graph.
 """
 
 import base64
@@ -69,10 +73,7 @@ FABRIC_LAB_USER_UPN = os.getenv("FABRIC_LAB_USER_UPN", "")
 FABRIC_LAB_USER_OID = os.getenv("FABRIC_LAB_USER_OID", "")
 CREATE_ONTOLOGY = os.getenv("CREATE_ONTOLOGY", "true").lower() == "true"
 INCLUDE_EMBEDDINGS = os.getenv("INCLUDE_EMBEDDINGS", "false").lower() == "true"
-# Disabled by default: adding this relationship currently breaks the Fabric IQ
-# GraphModel refresh ("GraphNotRefreshable: Graph doesn't have valid content and
-# cannot be refreshed."). Set INCLUDE_CATEGORY_RELATIONSHIP=true to re-enable once
-# the underlying Fabric Ontology preview issue is resolved.
+# Kept off by default to keep the ontology minimal; not required by the workshop questions.
 INCLUDE_CATEGORY_RELATIONSHIP = os.getenv("INCLUDE_CATEGORY_RELATIONSHIP", "false").lower() == "true"
 _CREDENTIAL = None
 
@@ -892,6 +893,80 @@ def update_ontology_definition(
     return True
 
 
+def find_graph_model_item(workspace_id: str, ontology_id: str) -> dict | None:
+    """Find the GraphModel item Fabric auto-creates alongside an ontology."""
+    resp = fabric_get(f"{FABRIC_API_BASE}/workspaces/{workspace_id}/items")
+    resp.raise_for_status()
+    suffix = ontology_id.replace("-", "")
+    for item in resp.json().get("value", []):
+        if item.get("type") == "GraphModel" and item.get("displayName", "").endswith(f"_graph_{suffix}"):
+            return item
+    return None
+
+
+def get_latest_job_instance(workspace_id: str, item_id: str) -> dict | None:
+    """Return the most recently started job instance for a Fabric item, if any."""
+    resp = fabric_get(f"{FABRIC_API_BASE}/workspaces/{workspace_id}/items/{item_id}/jobs/instances")
+    resp.raise_for_status()
+    instances = resp.json().get("value", [])
+    if not instances:
+        return None
+    return max(instances, key=lambda job: job.get("startTimeUtc", ""))
+
+
+def wait_for_graph_model_ready(
+    workspace_id: str,
+    ontology_id: str,
+    lakehouse_id: str,
+    max_attempts: int = 3,
+    poll_interval: int = 15,
+    poll_timeout: int = 240,
+    retry_wait: int = 90,
+) -> bool:
+    """Wait for the ontology's GraphModel refresh to succeed, retrying on GraphNotRefreshable.
+
+    Right after tables are loaded, Fabric's first automatic graph refresh can fail with
+    "GraphNotRefreshable: Graph doesn't have valid content and cannot be refreshed." because
+    the lakehouse's SQL analytics endpoint hasn't finished syncing the newly written Delta
+    tables yet. This is a timing race, not a schema problem: re-pushing the definition after
+    a short wait re-triggers the refresh and it succeeds once the sync catches up.
+    """
+    graph_item = find_graph_model_item(workspace_id, ontology_id)
+    if not graph_item:
+        log_message("WARNING: Could not locate the ontology's GraphModel item to verify readiness.")
+        return False
+
+    for attempt in range(1, max_attempts + 1):
+        job = None
+        waited = 0
+        while waited <= poll_timeout:
+            job = get_latest_job_instance(workspace_id, graph_item["id"])
+            status = job.get("status") if job else None
+            if status in ("Completed", "Failed", "Cancelled", "Deduped"):
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        status = job.get("status") if job else None
+        if status == "Completed":
+            log_message("GraphModel refresh completed successfully.")
+            return True
+
+        error_code = (job.get("failureReason") or {}).get("errorCode") if job else None
+        log_message(
+            f"GraphModel refresh attempt {attempt}/{max_attempts} did not complete "
+            f"(status={status}, errorCode={error_code})."
+        )
+        if error_code != "GraphNotRefreshable" or attempt == max_attempts:
+            return False
+
+        log_message(f"Likely a lakehouse sync race condition. Waiting {retry_wait}s and retrying...")
+        time.sleep(retry_wait)
+        update_ontology_definition(workspace_id, ontology_id, lakehouse_id)
+
+    return False
+
+
 def main():
     """Main execution flow."""
     log_message("=" * 60)
@@ -1011,6 +1086,18 @@ def main():
                 )
                 status = "SUCCESS" if ontology_success else "FAILED"
                 log_message(f"  {status}: {FABRIC_ONTOLOGY_NAME} ({ontology['id']})")
+
+                if ontology_success:
+                    log_message("Verifying the ontology's GraphModel refresh (retries on lakehouse sync races)...")
+                    graph_ready = wait_for_graph_model_ready(
+                        workspace_id, ontology["id"], lakehouse_id
+                    )
+                    if not graph_ready:
+                        log_message(
+                            "  WARNING: GraphModel did not confirm ready after retries. "
+                            "Fabric IQ queries may fail until it finishes building; re-run "
+                            "this script later or retry the Part 3/5 notebook cell."
+                        )
             except Exception as e:
                 ontology = None
                 ontology_success = False
