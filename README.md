@@ -9,15 +9,16 @@
 
 <img src="img/main_workflow.png" alt="워크샵 전체 워크플로우" width="800"/>
 
-Zava(DIY 소매업체) 신입 직원이 되어, Azure AI Search 에이전트형 검색의 **지식 베이스(Knowledge Base)** 에 소스를 하나씩 추가하며 HR·복리후생 질의응답 시스템을 확장하는 5단계 실습입니다.
+Zava(DIY 소매업체) 신입 직원이 되어, Azure AI Search 에이전트형 검색의 **지식 베이스(Knowledge Base)** 에 소스를 하나씩 추가하며 HR·복리후생 질의응답 시스템을 확장하는 6단계 실습입니다.
 
 - **Part 1**: File/Indexed Knowledge Source로 기본 지식 베이스 구축
 - **Part 2**: Web IQ(MCP)로 실시간 웹 검색 추가
 - **Part 3**: Fabric IQ로 구조화된 제품 데이터 추가
 - **Part 4**: Work IQ로 M365 개인 업무 데이터 추가
-- **Part 5**: 4개 소스를 하나의 지식 베이스로 통합
+- **Part 5**: Work IQ를 제외한 3개 소스(Foundry IQ + Fabric IQ + Web IQ)를 하나의 지식 베이스로 통합
+- **Part 6**: Work IQ까지 포함한 4개 소스를 하나의 지식 베이스로 통합
 
-<img src="img/microsoft_iq.png" alt="Part 5: 4개 지식 소스 통합 워크플로우" width="700"/>
+<img src="img/microsoft_iq.png" alt="Part 6: 4개 지식 소스 통합 워크플로우" width="700"/>
 
 이 워크샵에서 다루는 4가지 지식 소스(IQ)는 다음과 같습니다.
 
@@ -37,7 +38,7 @@ flowchart LR
     KB <--> FABIQ["Fabric IQ<br/>구조화된 운영 데이터<br/>(Part 3)"]
     KB <--> WORKIQ["Work IQ<br/>M365 이메일 · Teams · 캘린더<br/>(Part 4)"]
 
-    KB --> ANSWER["인용 기반 통합 답변<br/>(Part 5: 4개 소스 결합)"]
+    KB --> ANSWER["인용 기반 통합 답변<br/>(Part 5/6: 소스 결합)"]
 ```
 
 ### 본인 환경에서 시작하기 (Self-Paced Lab)
