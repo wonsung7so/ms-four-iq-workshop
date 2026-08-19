@@ -16,9 +16,9 @@ Zava(DIY 소매업체) 신입 직원이 되어, Azure AI Search 에이전트형 
 - **Part 3**: Fabric IQ로 구조화된 제품 데이터 추가
 - **Part 4**: Work IQ로 M365 개인 업무 데이터 추가
 - **Part 5**: Work IQ를 제외한 3개 소스(Foundry IQ + Fabric IQ + Web IQ)를 하나의 지식 베이스로 통합
-- **Part 6**: Work IQ까지 포함한 4개 소스를 하나의 지식 베이스로 통합
+- **Part 6**: Work IQ까지 포함한 5개 소스(Foundry IQ + Fabric IQ + Web IQ + Work IQ)를 하나의 지식 베이스로 통합
 
-<img src="img/microsoft_iq.png" alt="Part 6: 4개 지식 소스 통합 워크플로우" width="700"/>
+<img src="img/microsoft_iq.png" alt="Part 6: 5개 지식 소스 통합 워크플로우" width="700"/>
 
 이 워크샵에서 다루는 4가지 지식 소스(IQ)는 다음과 같습니다.
 
